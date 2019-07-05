@@ -8,6 +8,7 @@ using namespace std;
 #include <string>
 #include <dirent.h>
 #include <fstream>
+#include <assert.h>
 
 #pragma comment(lib,"ws2_32.lib")
 
@@ -55,6 +56,7 @@ void readFile(char*, char[]);
 void buildHeader(Header, char*, int);
 bool isFromBrowser(char*);
 string getHeaderData(char*);
+int fileCount = 0;
 
 struct SocketState sockets[MAX_SOCKETS] = { 0 };
 int socketsCount = 0;
@@ -292,92 +294,103 @@ void sendMessage(int index)
 {
 	Header header;
 	int bytesSent = 0;
-	char sendBuff[2000] = { '\0' };
-	char file[2000] = { '\0' };
-	sockets[index].isBrowser = isFromBrowser(sockets[index].buffer);
+	char sendBuff[2500];
+	char fileName[2500];
 	SOCKET msgSocket = sockets[index].id;
-	char myPath[_MAX_PATH + 1];
-	GetModuleFileNameA(NULL, myPath, _MAX_PATH);
+	char files[100] = "./Files/";
+	
 	if (sockets[index].sendSubType == GET)
 	{
-		char f[2000] = { "files\\" };
-		getFileName(file, sockets[index].buffer, sockets[index].reqInd);
-		strcat(f, file);
-		if (file[0] == '\0')
-			strcat(f, "index.html");
-		string path = getFilePath(myPath, f);
-		if (isFileExists(path))
+		char tmpBuffer[1500];
+		char fileName[1500];
+		char tmp[1500];
+		strcpy(tmpBuffer, sockets[index].buffer);
+		int count = 0;
+
+		char *token = strtok(tmpBuffer, " ");
+		while (token != NULL && count < 2)
 		{
-			char data[255] = { '\0' };
-			readFile(myPath, data);
-			strcpy(header.code, "200 OK");
-			strcpy(header.data, data);
-			header.len = strlen(data);
-			buildHeader(header, sendBuff, GET);
+			count++;
+			strcpy(tmp, token);
+			memcpy(fileName, &token[1], sizeof(tmp) - 1);
+			token = strtok(NULL, " ");
 		}
-		else
+		
+		if (fileName[0] == '\0')
+		{			
+			strcpy(fileName, "index.html");
+		}		
+
+		DIR* dir;
+		struct dirent* ent;
+		if ((dir = opendir("./Files")) != NULL) {
+			/* print all the files and directories within directory */
+			while ((ent = readdir(dir)) != NULL) {
+				if (strcmp(ent->d_name, fileName) == 0)
+				{
+					fileCount++;
+					strcat(files, fileName);
+					FILE *f = fopen(files, "r");
+					assert(f);
+					fseek(f, 0, SEEK_END);
+					long length = ftell(f);
+					fseek(f, 0, SEEK_SET);
+					char *buffer = (char *)malloc(length + 1);
+					buffer[length] = '\0';
+					fread(buffer, 1, length, f);
+					memset(files, 0, sizeof(files));
+					strcpy(files, "./Files/");
+					fclose(f);
+
+					strcpy(header.code, "200 OK");
+					strcpy(header.data, buffer);
+					header.len = strlen(header.data);
+					string fullHeader;
+					string code = header.code;
+					string data = header.data;
+					string len = to_string(header.len);
+					fullHeader = "HTTP/1.1 " + code + "\nContent-Type: text/plain\nContent-Length: " + len + "\n\n" + data;
+					strcpy(sendBuff, fullHeader.c_str());
+					int len1 = strlen(sendBuff);
+					sendBuff[len1] = '\0';
+				}				
+			}
+		}
+
+		if (fileCount == 0)
 		{
 			strcpy(header.code, "404 Not Found");
-			header.len = 0;
 			header.data[0] = '\0';
-			buildHeader(header, sendBuff, GET);
+			header.len = 0;
+			string fullHeader;
+			string code = header.code;
+			string data = header.data;
+			string len = to_string(header.len);
+			fullHeader = "HTTP/1.1 " + code + "\nContent-Type: text/plain\nContent-Length: " + len + "\n\n" + data;
+			strcpy(sendBuff, fullHeader.c_str());
+			int len1 = strlen(sendBuff);
+			sendBuff[len1] = '\0';
 		}
+
+		fileCount = 0;
+		closedir(dir);
+
+		sockets[index].send = IDLE;		
 	}
+
 	else if (sockets[index].sendSubType == PUT)
 	{
-		char f[2000] = { "files\\" };
-		getFileName(file, sockets[index].buffer, sockets[index].reqInd);
-		strcat(f, file);
-		if (file[0] == '\0')
-			strcat(f, "index.html");
-		string path = getFilePath(myPath, f);
-		if (isFileExists(path))
+		char *token = strtok(sockets[index].buffer, " ");
+		while (token != NULL)
 		{
-			strcpy(header.code, "204 No Content");
-			remove(path.c_str());
+			strcpy(fileName, token);
+			token = strtok(NULL, " ");
 		}
-		else
-			strcpy(header.code, "201 Created");
-		fstream file;
-		file.open(path, ios::out);
-		if (!f)
-		{
-			strcpy(sendBuff, "File could not be uploaded.");
-		}
-		else {
-
-			string data = string(getHeaderData(sockets[index].buffer));
-			file << data;
-			header.data[0] = '\0';
-			header.len = strlen(data.c_str());
-			buildHeader(header, sendBuff, PUT);
-		}
-		file.close();
+		strcat(files, fileName);
 	}
 	else if (sockets[index].sendSubType == HEAD)
 	{
-		char f[2000] = { "files\\" };
-		getFileName(file, sockets[index].buffer, sockets[index].reqInd);
-		strcat(f, file);
-		if (file[0] == '\0')
-			strcat(f, "index.html");
-		string path = getFilePath(myPath, f);
-		if (isFileExists(path))
-		{
-			char data[255] = { '\0' };
-			readFile(myPath, data);
-			strcpy(header.code, "200 OK");
-			header.data[0] = '\0';
-			header.len = strlen(data);
-			buildHeader(header, sendBuff, HEAD);
-		}
-		else
-		{
-			strcpy(header.code, "404 Not Found");
-			header.data[0] = '\0';
-			header.len = 0;
-			buildHeader(header, sendBuff, HEAD);
-		}
+		
 	}
 
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
