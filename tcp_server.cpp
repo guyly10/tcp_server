@@ -48,14 +48,7 @@ void removeSocket(int index);
 void acceptConnection(int index);
 void receiveMessage(int index);
 void sendMessage(int index);
-void setRequest(char*, char*);
-void getFileName(char*, char*, int);
-bool isFileExists(string);
-string getFilePath(char*, char*);
-void readFile(char*, char[]);
-void buildHeader(Header, char*, int);
-bool isFromBrowser(char*);
-string getHeaderData(char*);
+string getPutContent(char*);
 int fileCount = 0;
 
 struct SocketState sockets[MAX_SOCKETS] = { 0 };
@@ -203,7 +196,7 @@ void acceptConnection(int index)
 {
 	SOCKET id = sockets[index].id;
 	//Address of sending partner
-	struct sockaddr_in from;		
+	struct sockaddr_in from;
 	int fromLen = sizeof(from);
 
 	SOCKET msgSocket = accept(id, (struct sockaddr*) & from, &fromLen);
@@ -250,7 +243,7 @@ void receiveMessage(int index)
 	}
 	else
 	{
-		sockets[index].buffer[len + bytesRecv] = '\0';	
+		sockets[index].buffer[len + bytesRecv] = '\0';
 		sockets[index].len += bytesRecv;
 		char request[1500];
 		strcpy(request, sockets[index].buffer);
@@ -262,27 +255,24 @@ void receiveMessage(int index)
 			while (token != NULL)
 			{
 				token = strtok(NULL, " ");
-			}			
-			
+			}
+
 			if (strcmp(request, "GET") == 0)
 			{
 				sockets[index].send = SEND;
-				sockets[index].sendSubType = GET;
-				sockets[index].reqInd = 5;
+				sockets[index].sendSubType = GET;				
 				return;
 			}
 			else if (strcmp(request, "PUT") == 0)
 			{
 				sockets[index].send = SEND;
-				sockets[index].sendSubType = PUT;
-				sockets[index].reqInd = 5;
+				sockets[index].sendSubType = PUT;				
 				return;
 			}
 			else if (strcmp(request, "HEAD") == 0)
 			{
 				sockets[index].send = SEND;
-				sockets[index].sendSubType = HEAD;
-				sockets[index].reqInd = 6;
+				sockets[index].sendSubType = HEAD;				
 			}
 			memset(request, 0, sizeof(request));
 		}
@@ -294,11 +284,10 @@ void sendMessage(int index)
 {
 	Header header;
 	int bytesSent = 0;
-	char sendBuff[2500];
-	char fileName[2500];
+	char sendBuff[2500];	
 	SOCKET msgSocket = sockets[index].id;
 	char files[100] = "./Files/";
-	
+
 	if (sockets[index].sendSubType == GET)
 	{
 		char tmpBuffer[1500];
@@ -315,11 +304,11 @@ void sendMessage(int index)
 			memcpy(fileName, &token[1], sizeof(tmp) - 1);
 			token = strtok(NULL, " ");
 		}
-		
+
 		if (fileName[0] == '\0')
-		{			
+		{
 			strcpy(fileName, "index.html");
-		}		
+		}
 
 		DIR* dir;
 		struct dirent* ent;
@@ -353,7 +342,7 @@ void sendMessage(int index)
 					strcpy(sendBuff, fullHeader.c_str());
 					int len1 = strlen(sendBuff);
 					sendBuff[len1] = '\0';
-				}				
+				}
 			}
 		}
 
@@ -375,7 +364,7 @@ void sendMessage(int index)
 		fileCount = 0;
 		closedir(dir);
 
-		sockets[index].send = IDLE;		
+		sockets[index].send = IDLE;
 	}
 
 	else if (sockets[index].sendSubType == HEAD)
@@ -494,7 +483,7 @@ void sendMessage(int index)
 			if (fileCount == 0)
 			{
 				strcpy(header.code, "201 Created");
-			}			
+			}
 		}
 
 		fstream file;
@@ -504,9 +493,9 @@ void sendMessage(int index)
 		{
 			strcpy(sendBuff, "File could not be uploaded.");
 		}
-		else 
+		else
 		{
-			string data = string(getHeaderData(sockets[index].buffer));
+			string data = string(getPutContent(sockets[index].buffer));
 			file << data;
 			header.data[0] = '\0';
 			header.len = strlen(data.c_str());
@@ -543,79 +532,18 @@ void sendMessage(int index)
 	}
 }
 
-void setRequest(char* rec, char* req) {
-	int i = 0, j = 0;
-	while (rec[i] != ' ')
-		req[j++] = rec[i++];
-	req[j] = '\0';
-}
-
-void getFileName(char* file, char* buf, int ind) {
-	int i = 0;
-	while (buf[ind] != ' ' && buf[ind] != '\0' && buf[ind] != '\n')
-		file[i++] = buf[ind++];
-	file[i] = '\0';
-}
-
-string getFilePath(char* path, char* fileName) {
-	int len = strlen(path);
-	while (path[len] != '\\')
-		path[len--] = '\0';
-	len++;
-	int i = 0;
-	while (fileName[i] != '\0')
-		path[len++] = fileName[i++];
-	path[len] = '\0';
-	return string(path);
-}
-
-bool isFileExists(string fileName) {
-	struct stat buffer;
-	return (stat(fileName.c_str(), &buffer) == 0);
-}
-
-void readFile(char *fileName, char data[]) {
-	char arr[255] = "";
-	FILE *f = fopen(fileName, "rb");
-	fseek(f, 0, SEEK_END);
-	long fileSize = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	fread(arr, fileSize, 1, f);
-	fclose(f);
-	int i, j;
-	for (i = 0, j = 0; arr[i] != '\0'; i++)
-	{
-		data[j++] = arr[i];
-	}
-	data[j] = '\0';
-}
-
-void buildHeader(Header header, char* sendBuff, int type) {
-	string code = header.code;
-	string data = header.data;
-	string len = to_string(header.len);
-	string fullHeader;
-	fullHeader = "HTTP/1.1 " + code + "\nContent-Type: text/plain\nContent-Length: " + len + "\n\n" + data;
-	strcpy(sendBuff, fullHeader.c_str());
-	int len1 = strlen(sendBuff);
-	sendBuff[len1] = '\0';
-}
-
-bool isFromBrowser(char* buff) {
-	bool toReturn = true;
-	string f(buff);
-	if (f.find("no browser") != string::npos)
-		toReturn = false;
-	return toReturn;
-}
-
-string getHeaderData(char* buff) {
+string getPutContent(char* buff) {
 	char data[1500] = { '\0' };
 	int i = strlen(buff);
 	while (buff[i] != '\n')
+	{
 		i--;
+	}
+
 	i++;
 	for (int j = 0; buff[i] != '\0'; i++, j++)
+	{
 		data[j] = buff[i];
+	}
 	return string(data);
 }
