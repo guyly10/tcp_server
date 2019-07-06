@@ -28,8 +28,6 @@ struct SocketState
 	int sendSubType;
 	char buffer[2000];
 	int len;
-	int reqInd;
-	bool isBrowser;
 };
 
 const int WEB_PORT = 27015;
@@ -62,7 +60,7 @@ void main()
 
 	if (NO_ERROR != WSAStartup(MAKEWORD(2, 2), &wsaData))
 	{
-		cout << "Web Server: Error at WSAStartup()\n";
+		cout << "Server: Error at WSAStartup()\n";
 		return;
 	}
 
@@ -73,7 +71,7 @@ void main()
 
 	if (INVALID_SOCKET == listenSocket)
 	{
-		cout << "Web Server: Error at socket(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at socket(): " << WSAGetLastError() << endl;
 		WSACleanup();
 		return;
 	}
@@ -86,7 +84,7 @@ void main()
 
 	if (SOCKET_ERROR == bind(listenSocket, (SOCKADDR*)& serverService, sizeof(serverService)))
 	{
-		cout << "Web Server: Error at bind(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at bind(): " << WSAGetLastError() << endl;
 		closesocket(listenSocket);
 		WSACleanup();
 		return;
@@ -94,7 +92,7 @@ void main()
 
 	if (SOCKET_ERROR == listen(listenSocket, 5))
 	{
-		cout << "Web Server: Error at listen(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at listen(): " << WSAGetLastError() << endl;
 		closesocket(listenSocket);
 		WSACleanup();
 		return;
@@ -124,7 +122,7 @@ void main()
 		nfd = select(0, &waitRecv, &waitSend, NULL, NULL);
 		if (nfd == SOCKET_ERROR)
 		{
-			cout << "Web Server: Error at select(): " << WSAGetLastError() << endl;
+			cout << "Server: Error at select(): " << WSAGetLastError() << endl;
 			WSACleanup();
 			return;
 		}
@@ -163,7 +161,7 @@ void main()
 	}
 
 	// Closing connections and Winsock.
-	cout << "Web Server: Closing Connection.\n";
+	cout << "Server: Closing Connection.\n";
 	closesocket(listenSocket);
 	WSACleanup();
 }
@@ -202,16 +200,16 @@ void acceptConnection(int index)
 	SOCKET msgSocket = accept(id, (struct sockaddr*) & from, &fromLen);
 	if (INVALID_SOCKET == msgSocket)
 	{
-		cout << "Web Server: Error at accept(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at accept(): " << WSAGetLastError() << endl;
 		return;
 	}
-	cout << "Web Server: Client " << inet_ntoa(from.sin_addr) << ":" << ntohs(from.sin_port) << " is connected." << endl;
+	cout << "Server: Client " << inet_ntoa(from.sin_addr) << ":" << ntohs(from.sin_port) << " is connected." << endl;
 
 	// Set the socket to be in non-blocking mode.
 	unsigned long flag = 1;
 	if (ioctlsocket(msgSocket, FIONBIO, &flag) != 0)
 	{
-		cout << "Web Server: Error at ioctlsocket(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at ioctlsocket(): " << WSAGetLastError() << endl;
 	}
 
 	if (addSocket(msgSocket, RECEIVE) == false)
@@ -230,7 +228,7 @@ void receiveMessage(int index)
 
 	if (SOCKET_ERROR == bytesRecv)
 	{
-		cout << "Web Server: Error at recv(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at recv(): " << WSAGetLastError() << endl;
 		closesocket(msgSocket);
 		removeSocket(index);
 		return;
@@ -260,19 +258,19 @@ void receiveMessage(int index)
 			if (strcmp(request, "GET") == 0)
 			{
 				sockets[index].send = SEND;
-				sockets[index].sendSubType = GET;				
+				sockets[index].sendSubType = GET;
 				return;
 			}
 			else if (strcmp(request, "PUT") == 0)
 			{
 				sockets[index].send = SEND;
-				sockets[index].sendSubType = PUT;				
+				sockets[index].sendSubType = PUT;
 				return;
 			}
 			else if (strcmp(request, "HEAD") == 0)
 			{
 				sockets[index].send = SEND;
-				sockets[index].sendSubType = HEAD;				
+				sockets[index].sendSubType = HEAD;
 			}
 			memset(request, 0, sizeof(request));
 		}
@@ -284,9 +282,10 @@ void sendMessage(int index)
 {
 	Header header;
 	int bytesSent = 0;
-	char sendBuff[2500];	
+	char sendBuff[2500];
 	SOCKET msgSocket = sockets[index].id;
 	char files[100] = "./Files/";
+	
 
 	if (sockets[index].sendSubType == GET)
 	{
@@ -411,7 +410,7 @@ void sendMessage(int index)
 					fclose(f);
 
 					strcpy(header.code, "200 OK");
-					strcpy(header.data, buffer);
+					header.data[0] = '\0';
 					header.len = strlen(header.data);
 					string fullHeader;
 					string code = header.code;
@@ -487,6 +486,7 @@ void sendMessage(int index)
 		}
 
 		fstream file;
+		strcat(files, fileName);
 		file.open(files, ios::out);
 
 		if (!files)
@@ -513,23 +513,18 @@ void sendMessage(int index)
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
 	if (SOCKET_ERROR == bytesSent)
 	{
-		cout << "Web Server: Error at send(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at send(): " << WSAGetLastError() << endl;
 		return;
 	}
 
-	cout << "Web Server: Sent: " << bytesSent << "\\" << strlen(sendBuff) << " bytes of \"" << sendBuff << "\" message.\n";
+	cout << "Server: Sent: " << bytesSent << "\\" << strlen(sendBuff) << " bytes of \"" << sendBuff << "\" message.\n";
 
-	if (!sockets[index].isBrowser)
-	{
-		memset(sockets[index].buffer, 0, sizeof(sockets[index].buffer));
-		sockets[index].len = 0;
-		sockets[index].send = IDLE;
-	}
-	else
-	{
-		closesocket(msgSocket);
-		removeSocket(index);
-	}
+	memset(sockets[index].buffer, 0, sizeof(sockets[index].buffer));
+	sockets[index].len = 0;
+	sockets[index].send = IDLE;
+	closesocket(msgSocket);
+	removeSocket(index);
+
 }
 
 string getPutContent(char* buff) {
@@ -547,3 +542,4 @@ string getPutContent(char* buff) {
 	}
 	return string(data);
 }
+
