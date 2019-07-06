@@ -1,3 +1,4 @@
 ﻿  tcp_server.cpp
+c:\users\guy\documents\visual studio 2015\projects\tcp_server\tcp_server\tcp_server.cpp(298): warning C4101: 'fileName': unreferenced local variable
   tcp_server.vcxproj -> c:\Users\Guy\Documents\Visual Studio 2015\Projects\tcp_server\Debug\tcp_server.exe
   tcp_server.vcxproj -> c:\Users\Guy\Documents\Visual Studio 2015\Projects\tcp_server\Debug\tcp_server.pdb (Full PDB)
