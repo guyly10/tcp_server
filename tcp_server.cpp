@@ -491,7 +491,7 @@ void sendMessage(int index)
 
 		if (!files)
 		{
-			strcpy(sendBuff, "File could not be uploaded.");
+			strcpy(sendBuff, "File was not uploaded.");
 		}
 		else
 		{
